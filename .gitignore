@@ -6,9 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+*ENCRYPTION_KEY.py
+
+
 .idea/
 /shortcut\ translator/*.db
-
+*archive.py
 # Distribution / packaging
 .Python
 build/

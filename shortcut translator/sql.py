@@ -16,11 +16,11 @@ class DataBase:
         self.cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS data (
-            id integer PRIMARY KEY AUTOINCREMENT,
-            name VARCHAR(255) NOT NULL UNIQUE ON CONFLICT IGNORE,
-            translation VARCHAR(255),
-            time_created DATETIME,
-            tag VARCHAR(255)
+                id integer PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL UNIQUE ON CONFLICT IGNORE,
+                translation VARCHAR(255),
+                time_created DATETIME,
+                tag VARCHAR(255)
             )
             """
         )
@@ -52,13 +52,4 @@ if __name__ == "__main__":
     db = DataBase("s_translator.db")
     db.connect()
     db.create_table_if_not_exists()
-    # date_1 = '2023-01-12 07:00:00'
-    # date_2 = '2023-01-13 06:59:59'
-    # short_time = 31
-    # res = db.query_simple_load_on_date(date_1, date_2, short_time)
-    # print(f"{time.strftime('%H:%M:%S', time.gmtime(sum([x[1] for x in res])))}")
-    # print(f"{res = }")
-    # print(f"{len(res) = }")
-    # print()
-
     db.disconnect()

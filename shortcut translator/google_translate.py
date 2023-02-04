@@ -3,7 +3,7 @@ How to install lib:
 pip install --upgrade google-cloud-translate
 if Google can't authenticate:
 install google sdk, create json
-credential_path = "D:\...... .json"
+credential_path = "D: ...... .json"
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credential_path
 """
 from google.cloud import translate_v2
