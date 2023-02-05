@@ -1,3 +1,6 @@
+import os
+import sys
+
 import win32api
 import wx
 import wx.adv
@@ -8,13 +11,14 @@ import threading
 import requests
 
 from sql import DataBase
-from encryption import *
+from encryption import do_encrypt
 
-TRAY_ICON = 'tray_image.png'
+# 0.2 seconds, CPU need time between saving to clipboard by ctrl+c and using info from clipboard
 TIME_SLEEP_BETWEEN_KEYPRESS = 0.2
-EMPTY_NAME = "<<error>>"
-API_URL = "http://127.0.0.1:8000/api/v1/translate/"
 
+EMPTY_NAME = "<<error>>"
+TRANSLATOR_API_URL = "https://keeptranslations.na4u.ru/api/v1/translate/"
+# TRANSLATOR_API_URL = str(os.environ.get('TRANSLATOR_API_URL', default="http://127.0.0.1:8000/api/v1/translate/"))
 LETTERS_RUS = "фисвуапршолдьтщзйкыегмцчняФИСDEÀÏРШJËДЬТЩЗЙКЫЕГМЦЧНЯ"
 LETTERS_ENG = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -25,12 +29,18 @@ db.create_table_if_not_exists()
 last_word = {'word': None, 'translation': None}
 
 
-def create_menu_item(menu, label, func, enabled=True):
-    item = wx.MenuItem(menu, -1, label)
-    item.Enable(enabled)
-    menu.Bind(wx.EVT_MENU, func, id=item.GetId())
-    menu.Append(item)
-    return item
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
+TRAY_ICON = resource_path("tray_image.png")
 
 
 class TaskBarIcon(wx.adv.TaskBarIcon):
@@ -41,27 +51,28 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
         self.set_icon(TRAY_ICON)
         self.frame.task_bar_icon = self
 
+    @staticmethod
+    def create_menu_item(menu, label, func, enabled=True):
+        item = wx.MenuItem(menu, -1, label)
+        item.Enable(enabled)
+        menu.Bind(wx.EVT_MENU, func, id=item.GetId())
+        menu.Append(item)
+        return item
+
     def CreatePopupMenu(self):
         menu = wx.Menu()
 
         # Just hints to the user
-        create_menu_item(menu, 'Do translit: ctrl+shift+`', self.func, enabled=False)
-        create_menu_item(menu, 'Do translate: ctrl+shift+1', self.func, enabled=False)
+        self.create_menu_item(menu, 'Do translit: ctrl+shift+`', lambda event: None, enabled=False)
+        self.create_menu_item(menu, 'Do translate: ctrl+shift+1', lambda event: None, enabled=False)
 
         menu.AppendSeparator()
-        create_menu_item(menu, 'Exit', self.on_exit)
+        self.create_menu_item(menu, 'Exit', self.on_exit)
         return menu
-
-    def func(self, event):
-        pass
 
     def set_icon(self, path, text=""):
         icon = wx.Icon(path)
         self.SetIcon(icon, text)
-
-    def on_left_down(self, event):
-        self.frame.Close()
-        self.Destroy()
 
     def on_exit(self, event):
         wx.CallAfter(self.Destroy)
@@ -123,11 +134,11 @@ class PopupWindow(wx.Frame):
         self.Bind(wx.EVT_MOTION, self.on_mouse_moved, id=wx.ID_ANY)
 
     def on_mouse_moved(self, event):
-        print("mouse moved")
+        # print("mouse moved")
         self.Close()
 
     def on_key_pressed(self, event):
-        print("Key pressed")
+        # print("Key pressed")
         self.Close()
 
     def on_timer(self, event):
@@ -141,15 +152,19 @@ class MainWindow(wx.Frame):
                           style=wx.RESIZE_BORDER | wx.CAPTION | wx.CLOSE_BOX | wx.CLIP_CHILDREN)
 
         self.wnd = None
+        self.ready = True
 
         self.worker = WorkerThread(self)
         self.worker.start()
 
         self.timer = wx.Timer(self)
 
+        self.timer_rare_call = wx.Timer(self)
+
         self.Bind(wx.EVT_ICONIZE, self.new_frame, id=10)
         self.Bind(wx.EVT_ICONIZE, self.do_translit, id=20)
         self.Bind(wx.EVT_TIMER, self.on_timer, self.timer)
+        self.Bind(wx.EVT_TIMER, self.on_timer_rare_call, self.timer_rare_call)
 
     def on_timer(self, event):
         self.close_window()
@@ -158,7 +173,8 @@ class MainWindow(wx.Frame):
         if self.wnd:
             self.wnd.Close()
 
-    def get_data_from_clipboard(self):
+    @staticmethod
+    def get_data_from_clipboard():
         pyperclip.copy(EMPTY_NAME)
         time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
         keyboard.press_and_release('ctrl+c')
@@ -173,128 +189,139 @@ class MainWindow(wx.Frame):
         data_from_clipboard = pyperclip.paste()
         return data_from_clipboard
 
-    def new_frame(self, event):
-        mouse_pos = win32api.GetCursorPos()
-        message = self.do_translate()
-        if message:
-            self.wnd = PopupWindow(self, mouse_pos, message=message)
-            self.wnd.Show()
+    def on_timer_rare_call(self, event):
+        self.ready = True
 
-            time_till_pop = 3000 + len(message[10:]) * 70
-            self.timer.Start(time_till_pop)
-        # wx.CallLater(10000, self.Close_window)
+    def new_frame(self, event):
+
+        # prevent multiple press
+        if self.ready:
+            if self.wnd:
+                # print(f"{self.wnd = }")
+                self.wnd.Close()
+
+            self.timer_rare_call.Start(1000)
+            self.ready = False
+
+            mouse_pos = win32api.GetCursorPos()
+            data_from_clipboard = self.get_data_from_clipboard()
+
+            if len(data_from_clipboard) < 2:
+                message = None
+            elif data_from_clipboard == last_word['word']:
+                message = last_word['translation']
+            elif data_from_clipboard == EMPTY_NAME:
+                message = EMPTY_NAME
+            else:
+
+                # try to find the translation in local database
+                translated_text = db.check_word(data_from_clipboard)
+                if translated_text:
+                    message = translated_text
+                else:
+                    message = self.do_translate(data_from_clipboard)
+
+            if message:
+                self.wnd = PopupWindow(self, mouse_pos, message=message)
+                self.wnd.Show()
+
+                time_till_pop = 3000 + len(message[10:]) * 70
+                self.timer.Start(time_till_pop)
+                # wx.CallLater(10000, self.Close_window)
 
     def do_translit(self, event):
         data_from_clipboard = self.get_data_from_clipboard()
+        if data_from_clipboard != EMPTY_NAME:
+            rus = 1
+            for i in data_from_clipboard:
+                if i in LETTERS_RUS:
+                    rus += 1
+                else:
+                    rus -= 1
 
-        rus = 1
+            if rus > 0:
+                my_table = data_from_clipboard.maketrans(LETTERS_RUS, LETTERS_ENG)
+            else:
+                my_table = data_from_clipboard.maketrans(LETTERS_ENG, LETTERS_RUS)
+
+            try:
+                translit_data = data_from_clipboard.translate(my_table)
+                pyperclip.copy(translit_data)
+                time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
+                data_from_clipboard_new = pyperclip.paste()
+                if data_from_clipboard_new == data_from_clipboard:
+                    pyperclip.copy(translit_data)
+                    time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS * 3)
+                # print(f"{translit_data = }")
+                keyboard.press_and_release('ctrl+v')
+            except UnicodeEncodeError:
+                print(f"UnicodeEncodeError...")
+
+    @staticmethod
+    def do_translate(data_from_clipboard_raw):
+
+        data_from_clipboard = data_from_clipboard_raw.replace('.', '. ').replace('_', '-')
+
+        # if there are more Russian letters in the text, then we translate into English
+        rus = 0
         for i in data_from_clipboard:
             if i in LETTERS_RUS:
                 rus += 1
             else:
                 rus -= 1
-
         if rus > 0:
-            mytable = data_from_clipboard.maketrans(LETTERS_RUS, LETTERS_ENG)
+            target_language = 'en'
+            source_language = 'ru'
         else:
-            mytable = data_from_clipboard.maketrans(LETTERS_ENG, LETTERS_RUS)
+            target_language = 'ru'
+            source_language = 'en'
+
+        data = {
+            "word": data_from_clipboard,
+            'target_language': target_language,
+            'source_language': source_language,
+        }
 
         try:
-            translit_data = data_from_clipboard.translate(mytable)
+            response = requests.get(
+                TRANSLATOR_API_URL,
+                params={"encrypted_data": do_encrypt(data)},
+                timeout=5
+            )
 
-            time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
-            pyperclip.copy(translit_data)
-            time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
+            if response.status_code == 200:
+                translated_text = response.json()['translation']
 
-            print(f"{translit_data = }")
-
-            keyboard.press_and_release('ctrl+v')
-        except UnicodeEncodeError:
-            print(f"UnicodeEncodeError...")
-
-    def do_translate(self):
-        data_from_clipboard = self.get_data_from_clipboard()
-        if len(data_from_clipboard) >= 2:
-            if data_from_clipboard == last_word['word']:
-                translated_text = last_word['translation']
+                # save only 1-3 word phrases
+                if len(data_from_clipboard.strip().split(' ')) <= 3:
+                    db.query_save(data_from_clipboard, translated_text)
             else:
-                if data_from_clipboard != EMPTY_NAME:
-                    translated_text = db.check_word(data_from_clipboard)
-                    # print(f"{translated_text = }")
-                    if not translated_text:
-                        rus = 0
-                        for i in data_from_clipboard:
-                            if i in LETTERS_RUS:
-                                rus += 1
-                            else:
-                                rus -= 1
-                        if '.' in data_from_clipboard:
-                            data_from_clipboard = data_from_clipboard.replace('.', '. ')
-                        if '_' in data_from_clipboard:
-                            data_from_clipboard = data_from_clipboard.replace('_', '-')
+                translated_text = f"<<{response.json()}>>"
+        except Exception:
+            translated_text = "<<connection error>>"
 
-                        if rus > 0:
-                            target_language = 'en'
-                            source_language = 'ru'
-                        else:
-                            target_language = 'ru'
-                            source_language = 'en'
+        pyperclip.copy(translated_text)
 
-                        params = {"word": data_from_clipboard,
-                                  'target_language': target_language,
-                                  'source_language': source_language,
-                                  },
-
-                        response = requests.get(
-                            API_URL,
-                            params={"encrypted_data": do_encrypt(params)},
-                            timeout=5
-                        )
-
-                        print(f"{response.status_code = }")
-                        print(f"{response.content = }")
-                        if response.status_code == 200:
-                            translated_text = response.json()['translation']
-                            print(f"{response.json()['translation'] = }")
-                            # print(f"{response.content = }")
-                            print(f"{response.status_code = }")
-
-                            # save only 1-2 word phrases
-                            if len(data_from_clipboard.strip().split(' ')) <= 2:
-                                db.query_save(data_from_clipboard, translated_text)
-                        elif response.status_code == 403:
-                            translated_text = f"<<{response.json()['detail']}>>"
-                            # print("12111111111111")
-                        else:
-                            translated_text = f"<<{response.json()}>>"
-                            # translated_text = response.json()['error']
-                            # translated_text = '<<403 auth error>>'
-
-                        print("new translation")
-                    else:
-                        print("used existing word from db")
-                        pass
-                    # print(f"{translated_text = }")
-                    pyperclip.copy(translated_text)
-                    time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
-                else:
-                    translated_text = EMPTY_NAME
-            last_word['word'] = data_from_clipboard
-            last_word['translation'] = translated_text
-        else:
-            translated_text = None
-        print(f"{translated_text = }")
-        # keyboard.press_and_release('ctrl+v')
+        last_word['word'] = data_from_clipboard_raw
+        last_word['translation'] = translated_text
         return translated_text
 
 
 class WorkerThread(threading.Thread):
+    """
+    This class is needed to constantly monitor keys state simultaneously with
+    the execution of the graphical part of the application
+    """
+
     def __init__(self, window):
         threading.Thread.__init__(self)
         self.window = window
         self.window.wnd = None
         keyboard.add_hotkey('ctrl+shift+1', self.do_translate)
-        keyboard.add_hotkey('ctrl+shift+`', self.do_translit)
+        try:
+            keyboard.add_hotkey('ctrl+shift+`', self.do_translit)
+        except ValueError:
+            keyboard.add_hotkey('ctrl+shift+ё', self.do_translit)
 
     def do_translate(self):
         if self.window.wnd:
