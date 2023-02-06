@@ -25,3 +25,6 @@ Translated text will also be copied to clipboard. The popup window disappears af
 
 ## 🔷 System requirements
 Windows 10  
+<div align="right">
+  <b><a href="#index">↥ Back To Top</a></b>
+</div>
