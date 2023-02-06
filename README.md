@@ -8,7 +8,7 @@
 🔹 select text in any app, then press ctrl+shift+1 to translate text from russian to english and vice versa
 
 ## 🔷 Install
-Simply download [translator.exe](https://github.com/pandabyxanda/shortcut-translator/blob/55e8a6165ef2193222c45071fa39c52658e69f3b/shortcut%20translator/translator.exe) to any folder on your computer. Run translator.exe   
+Simply download translator.exe to any folder on your computer. Run translator.exe   
 To automatically start when you turn on your computer just copy a shortcut of .exe file to the following 
 path (change user_name): C:\Users\user_name\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup  
 
