@@ -12,6 +12,7 @@ import requests
 
 from sql import DataBase
 from encryption import do_encrypt
+from keyboard_language import get_keyboard_language
 
 # 0.2 seconds, CPU need time between saving to clipboard by ctrl+c and using info from clipboard
 TIME_SLEEP_BETWEEN_KEYPRESS = 0.2
@@ -21,12 +22,6 @@ TRANSLATOR_API_URL = "https://keeptranslations.na4u.ru/api/v1/translate/"
 # TRANSLATOR_API_URL = str(os.environ.get('TRANSLATOR_API_URL', default="http://127.0.0.1:8000/api/v1/translate/"))
 LETTERS_RUS = "фисвуапршолдьтщзйкыегмцчняФИСDEÀÏРШJËДЬТЩЗЙКЫЕГМЦЧНЯ"
 LETTERS_ENG = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-db = DataBase("s_translator.db")
-db.connect()
-db.create_table_if_not_exists()
-
-last_word = {'word': None, 'translation': None}
 
 
 def resource_path(relative_path):
@@ -77,6 +72,7 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
     def on_exit(self, event):
         wx.CallAfter(self.Destroy)
         self.frame.Destroy()
+        # self.frame.worker.stop()
 
 
 class PopupWindow(wx.Frame):
@@ -177,11 +173,11 @@ class MainWindow(wx.Frame):
     def get_data_from_clipboard():
         pyperclip.copy(EMPTY_NAME)
         time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
-        keyboard.press_and_release('ctrl+c')
+        keyboard.press_and_release(keys_ctrl_c)
         time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS)
         data_from_clipboard = pyperclip.paste()
         if data_from_clipboard == EMPTY_NAME:
-            keyboard.press_and_release('ctrl+c')
+            keyboard.press_and_release(keys_ctrl_c)
 
             # in case of processor being busy, increase the time after saving to the clipboard and getting from there
             time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS * 3)
@@ -230,7 +226,9 @@ class MainWindow(wx.Frame):
                 # wx.CallLater(10000, self.Close_window)
 
     def do_translit(self, event):
+        print("translit")
         data_from_clipboard = self.get_data_from_clipboard()
+        print(f"{data_from_clipboard = }")
         if data_from_clipboard != EMPTY_NAME:
             rus = 1
             for i in data_from_clipboard:
@@ -253,7 +251,7 @@ class MainWindow(wx.Frame):
                     pyperclip.copy(translit_data)
                     time.sleep(TIME_SLEEP_BETWEEN_KEYPRESS * 3)
                 # print(f"{translit_data = }")
-                keyboard.press_and_release('ctrl+v')
+                keyboard.press_and_release(keys_ctrl_v)
             except UnicodeEncodeError:
                 print(f"UnicodeEncodeError...")
 
@@ -317,11 +315,8 @@ class WorkerThread(threading.Thread):
         threading.Thread.__init__(self)
         self.window = window
         self.window.wnd = None
-        keyboard.add_hotkey('ctrl+shift+1', self.do_translate)
-        try:
-            keyboard.add_hotkey('ctrl+shift+`', self.do_translit)
-        except ValueError:
-            keyboard.add_hotkey('ctrl+shift+ё', self.do_translit)
+        keyboard.add_hotkey(keys_ctrl_shift_1, self.do_translate)
+        keyboard.add_hotkey(keys_ctrl_shift_yo, self.do_translit)
 
     def do_translate(self):
         if self.window.wnd:
@@ -332,6 +327,14 @@ class WorkerThread(threading.Thread):
     def do_translit(self):
         evt = wx.IconizeEvent(id=20, iconized=True)
         wx.PostEvent(self.window.GetEventHandler(), evt)
+
+    # def run(self):
+    #     # Do some long running task
+    #     keyboard.wait()
+    # while True:
+    #     print("Waiting for")
+    #     time.sleep(5)
+    # wx.CallAfter(self.window.button.Enable)
 
 
 class App(wx.App):
@@ -346,8 +349,28 @@ class App(wx.App):
         return True
 
 
-app = App(redirect=False)
-app.MainLoop()
+if __name__ == "__main__":
+    db = DataBase("s_translator.db")
+    db.connect()
+    db.create_table_if_not_exists()
 
-db.disconnect()
-print("Exiting app correctly...")
+    last_word = {'word': None, 'translation': None}
+
+    # keyboard lib does not work correctly with the names of the keys set in dif language
+    current_language = get_keyboard_language()
+    # print(f"{current_language = }")
+    if 'eng' in current_language.lower():
+        keys_ctrl_c = 'ctrl+c'
+        keys_ctrl_v = 'ctrl+v'
+        keys_ctrl_shift_yo = 'ctrl+shift+`'
+    else:
+        keys_ctrl_c = 'ctrl+с'
+        keys_ctrl_v = 'ctrl+м'
+        keys_ctrl_shift_yo = 'ctrl+shift+ё'
+    keys_ctrl_shift_1 = 'ctrl+shift+1'
+
+    app = App(redirect=False)
+    app.MainLoop()
+
+    db.disconnect()
+    print("Exiting app correctly...")
