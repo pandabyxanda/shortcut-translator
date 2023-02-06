@@ -115,14 +115,20 @@ class PopupWindow(wx.Frame):
             if text_dimensions[1] > text_height:
                 text_height = text_dimensions[1]
 
-        screen_size = wx.DisplaySize()
-        if text_width + 10 * 2 + pos[0] > screen_size[0]:
-            pos = (
-                screen_size[0] - (text_width + 10 * 2) - 50, mouse_pos[1] - (text_height * len(message_list) + 20) - 20)
+        displays = [wx.Display(i) for i in range(wx.Display.GetCount())]
+        active_display = wx.Display.GetFromPoint(wx.GetMousePosition())
+        display_rect = displays[active_display].GetGeometry()
+        # width, height = display_rect.GetSize()
+        # x, y = mouse_pos[0] - display_rect.x, mouse_pos[0] - display_rect.y
+
+        size = (text_width + 10 * 2, text_height * len(message_list) + 20)
+        if mouse_pos[0] - display_rect.x - size[0] < 20:
+            pos = (display_rect.x + 20, mouse_pos[1] - size[1] - 20)
         else:
-            pos = (mouse_pos[0] + 20, mouse_pos[1] - (text_height * len(message_list) + 20) - 20)
+            pos = (mouse_pos[0] - size[0], mouse_pos[1] - size[1] - 20)
+
         self.SetPosition(pos)
-        self.SetSize((text_width + 10 * 2, text_height * len(message_list) + 20))
+        self.SetSize(size)
 
         for i in range(0, len(self.st)):
             self.st[i].SetPosition((10, i * text_height + 10 - 2))
@@ -148,7 +154,6 @@ class MainWindow(wx.Frame):
                           style=wx.RESIZE_BORDER | wx.CAPTION | wx.CLOSE_BOX | wx.CLIP_CHILDREN)
 
         self.wnd = None
-        self.ready = True
 
         self.worker = WorkerThread(self)
         self.worker.start()
@@ -160,7 +165,6 @@ class MainWindow(wx.Frame):
         self.Bind(wx.EVT_ICONIZE, self.new_frame, id=10)
         self.Bind(wx.EVT_ICONIZE, self.do_translit, id=20)
         self.Bind(wx.EVT_TIMER, self.on_timer, self.timer)
-        self.Bind(wx.EVT_TIMER, self.on_timer_rare_call, self.timer_rare_call)
 
     def on_timer(self, event):
         self.close_window()
@@ -185,45 +189,39 @@ class MainWindow(wx.Frame):
         data_from_clipboard = pyperclip.paste()
         return data_from_clipboard
 
-    def on_timer_rare_call(self, event):
-        self.ready = True
-
     def new_frame(self, event):
+        if self.wnd:
+            # print(f"{self.wnd = }")
+            self.wnd.Close()
 
-        # prevent multiple press
-        if self.ready:
-            if self.wnd:
-                # print(f"{self.wnd = }")
-                self.wnd.Close()
+        self.timer_rare_call.Start(1000)
+        self.ready = False
 
-            self.timer_rare_call.Start(1000)
-            self.ready = False
+        mouse_pos = win32api.GetCursorPos()
+        data_from_clipboard = self.get_data_from_clipboard()
 
-            mouse_pos = win32api.GetCursorPos()
-            data_from_clipboard = self.get_data_from_clipboard()
+        if len(data_from_clipboard) < 2:
+            message = None
+        elif data_from_clipboard == last_word['word']:
+            message = last_word['translation']
+        elif data_from_clipboard == EMPTY_NAME:
+            message = EMPTY_NAME
+        else:
 
-            if len(data_from_clipboard) < 2:
-                message = None
-            elif data_from_clipboard == last_word['word']:
-                message = last_word['translation']
-            elif data_from_clipboard == EMPTY_NAME:
-                message = EMPTY_NAME
+            # try to find the translation in local database
+            translated_text = db.check_word(data_from_clipboard)
+            if translated_text:
+                message = translated_text
             else:
+                message = self.do_translate(data_from_clipboard)
 
-                # try to find the translation in local database
-                translated_text = db.check_word(data_from_clipboard)
-                if translated_text:
-                    message = translated_text
-                else:
-                    message = self.do_translate(data_from_clipboard)
+        if message:
+            self.wnd = PopupWindow(self, mouse_pos, message=message)
+            self.wnd.Show()
 
-            if message:
-                self.wnd = PopupWindow(self, mouse_pos, message=message)
-                self.wnd.Show()
-
-                time_till_pop = 3000 + len(message[10:]) * 70
-                self.timer.Start(time_till_pop)
-                # wx.CallLater(10000, self.Close_window)
+            time_till_pop = 3000 + len(message[10:]) * 70
+            self.timer.Start(time_till_pop)
+            # wx.CallLater(10000, self.Close_window)
 
     def do_translit(self, event):
         print("translit")
