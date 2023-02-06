@@ -321,10 +321,18 @@ class WorkerThread(threading.Thread):
     def do_translate(self):
         if self.window.wnd:
             self.window.wnd.Close()
+
+        while not all(keyboard.is_pressed(key) is False for key in keys):
+            time.sleep(0.1)
+
         evt = wx.IconizeEvent(id=10, iconized=True)
         wx.PostEvent(self.window.GetEventHandler(), evt)
 
     def do_translit(self):
+
+        while not all(keyboard.is_pressed(key) is False for key in keys):
+            time.sleep(0.1)
+
         evt = wx.IconizeEvent(id=20, iconized=True)
         wx.PostEvent(self.window.GetEventHandler(), evt)
 
@@ -360,14 +368,23 @@ if __name__ == "__main__":
     current_language = get_keyboard_language()
     # print(f"{current_language = }")
     if 'eng' in current_language.lower():
-        keys_ctrl_c = 'ctrl+c'
-        keys_ctrl_v = 'ctrl+v'
-        keys_ctrl_shift_yo = 'ctrl+shift+`'
+        key_c = 'c'
+        key_v = 'v'
+        key_yo = '`'
     else:
-        keys_ctrl_c = 'ctrl+с'
-        keys_ctrl_v = 'ctrl+м'
-        keys_ctrl_shift_yo = 'ctrl+shift+ё'
-    keys_ctrl_shift_1 = 'ctrl+shift+1'
+        key_c = 'с'
+        key_v = 'м'
+        key_yo = 'ё'
+
+    key_ctrl = 'ctrl'
+    key_shift = 'shift'
+    key_one = '1'
+    keys_ctrl_c = f"{key_ctrl}+{key_c}"
+    keys_ctrl_v = f"{key_ctrl}+{key_v}"
+    keys_ctrl_shift_yo = f"{key_ctrl}+{key_shift}+{key_yo}"
+    keys_ctrl_shift_1 = f"{key_ctrl}+{key_shift}+{key_one}"
+
+    keys = (key_ctrl, key_shift, key_one, key_yo)
 
     app = App(redirect=False)
     app.MainLoop()
