@@ -14,17 +14,18 @@ path (change user_name): C:\Users\user_name\AppData\Roaming\Microsoft\Windows\St
 
 ## 🔷 How to use
 🔹 Select text in any app, then press ctrl+shift+` to transliterate text from russian to english and vice versa
-(to change text using the closest corresponding letters of russian or english alphabet). 
+(to change text using the closest corresponding letters of russian or english alphabet) 
 Text will be saved in clipboard and the original text will be replaced.  
 
 🔹 Select text in any app, then press ctrl+shift+1 to translate text from russian to english and vice versa.
 Text will be saved in clipboard and a small popup window with translated text will appear near your mouse pointer. 
-Translated text will also be copied to clipboard. The popup window disappears after a while or on mouse hover.  
+Translated text will also be copied to clipboard. The popup window disappears after a while or on mouse hover. 
+You can use translator in pdf, txt, excel, whatsapp, telegram etc
 
 <img src="https://user-images.githubusercontent.com/110741053/216773022-52ff9343-19a6-4cd6-963a-b0993bf305b2.png" width=70% >
 
 ## 🔷 System requirements
 Windows 10  
 <div align="right">
-  <b><a href="#Shortcut-translator">↥ Back To Top</a></b>
+  <b><a href="#Shortcut-translator">🔝 Back To Top</a></b>
 </div>
