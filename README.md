@@ -26,5 +26,5 @@ Translated text will also be copied to clipboard. The popup window disappears af
 ## 🔷 System requirements
 Windows 10  
 <div align="right">
-  <b><a href="#Features">↥ Back To Top</a></b>
+  <b><a href="#Shortcut translator">↥ Back To Top</a></b>
 </div>
